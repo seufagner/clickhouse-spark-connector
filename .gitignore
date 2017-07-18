@@ -32,3 +32,6 @@ sync.sh
 logs/
 metastore_db/
 *.log
+/bin/
+.cache-main
+.cache-tests

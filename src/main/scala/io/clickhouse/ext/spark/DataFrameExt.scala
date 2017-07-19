@@ -117,18 +117,25 @@ case class DataFrameExt(df : org.apache.spark.sql.DataFrame) extends Serializabl
           counter += 1
           val row = partition.next()
 
-          // create mock date
           val partitionVal = partitionFunc(row)
           statement.setDate(1, partitionVal)
+          print("===========")
+          print(partitionVal)
+          print("===========")              
+                    
 
           // map fields
           schema.foreach { f =>
             val fieldName = f.name
             val fieldIdx = row.fieldIndex(fieldName)
             val fieldVal = row.get(fieldIdx)
-            if (fieldVal != null)
+            if (fieldVal != null) {
+              print("===========")
+              print(fieldIdx)
+              print(fieldVal)
               statement.setObject(fieldIdx + 2, fieldVal)
-            else {
+              print("===========")
+            } else {
               val defVal = defaultNullValue(f.dataType, fieldVal)
               statement.setObject(fieldIdx + 2, defVal)
             }

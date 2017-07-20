@@ -40,17 +40,22 @@ case class DataFrameExt(df : org.apache.spark.sql.DataFrame) extends Serializabl
   }
 
   /**
-    * Creates a new table if it not exists. Connection is on ClickHouseDataSource implicit instance
+    * Creates a new table if it not exists
     *
     *  @param dbName
     *  @param tableName
     *  @param partitionColumnName [ Date field ] that will be used MergeTree engine splits data into partitions by months,
     *  	and the engine needs a way to know what date a record belongs to and it only was taught to use Date typed field for the purpose.
     *  @param indexColumns ??
-    *  @param clusterName
+    *  @param clusterName Specify cluster name if you want to create Distributed table
     *
     */
   def createClickhouseTable(dbName : String, tableName : String, partitionColumnName : String, indexColumns : Seq[String], clusterName : Option[String] = None)(implicit ds : ClickHouseDataSource) {
+    assert(dbName != "")
+    assert(tableName != "")
+    assert(partitionColumnName != "")
+    
+    
     val client = ClickhouseClient(clusterName)(ds)
     val sqlStmt = createClickhouseTableDefinitionSQL(dbName, tableName, partitionColumnName, indexColumns)
 
@@ -66,6 +71,30 @@ case class DataFrameExt(df : org.apache.spark.sql.DataFrame) extends Serializabl
         client.queryCluster(sqlStmt2)
     }
   }
+
+  /**
+    * Drop existing table. 
+    * It doesn’t return an error if the table doesn’t exist or the database doesn’t exist.
+    * 
+    *  @param dbName
+    *  @param tableName
+    *  @param clusterName Specify cluster name if you want to delete table on entire cluster
+    *
+    */
+  def dropClickhouseTable(dbName : String, tableName : String, clusterName : Option[String] = None)(implicit ds : ClickHouseDataSource) {
+    assert(dbName != "")
+    assert(tableName != "")
+    
+    val client = ClickhouseClient(clusterName)(ds)
+    var sqlStmt = s"DROP TABLE IF EXISTS $dbName.$tableName"
+
+    if (clusterName != None) {
+      sqlStmt += s" ON CLUSTER $clusterName"
+    }
+    
+    client.query(sqlStmt)
+  }
+  
 
   /**
     * Save data on specific table

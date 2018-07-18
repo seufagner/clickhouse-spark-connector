@@ -3,7 +3,7 @@ name := """clickhouse-spark-connector"""
 
 version := "1.2"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 publishTo := Some("jFrog" at "http://10.2.95.5:8080/artifactory/libs-release")
 

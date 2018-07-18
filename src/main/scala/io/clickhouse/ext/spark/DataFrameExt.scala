@@ -96,13 +96,13 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
   }
 
 
-  def renameClickhouseTable(dbName: String, tableName: String, tmpTable: String, clusterName: Option[String] = None)(implicit ds: ClickHouseDataSource): Unit = {
+  def renameClickhouseTable(dbName: String, tableName: String, newTable: String, clusterName: Option[String] = None)(implicit ds: ClickHouseDataSource): Unit = {
     assert(dbName != "")
     assert(tableName != "")
-    assert(tmpTable != "")
+    assert(newTable != "")
 
     val client = ClickhouseClient(clusterName)(ds)
-    var sqlStmt = s"RENAME TABLE $dbName.$tmpTable TO $dbName.$tableName"
+    var sqlStmt = s"RENAME TABLE $dbName.$tableName TO $dbName.$newTable"
 
     if (clusterName != None) {
       sqlStmt += s" ON CLUSTER $clusterName"

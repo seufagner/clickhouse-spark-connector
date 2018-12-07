@@ -25,22 +25,6 @@ object ClickhouseSparkExt {
 
 case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable {
 
-  def dropClickhouseDb(dbName: String, clusterNameO: Option[String] = None)(implicit ds: ClickHouseDataSource) {
-    val client = ClickhouseClient(clusterNameO)(ds)
-    clusterNameO match {
-      case None => client.dropDb(dbName)
-      case Some(x) => client.dropDbCluster(dbName)
-    }
-  }
-
-  def createClickhouseDb(dbName: String, clusterNameO: Option[String] = None)(implicit ds: ClickHouseDataSource) {
-    val client = ClickhouseClient(clusterNameO)(ds)
-    clusterNameO match {
-      case None => client.createDb(dbName)
-      case Some(x) => client.createDbCluster(dbName)
-    }
-  }
-
   /**
     * Creates a new table if it not exists
     *
@@ -52,25 +36,15 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     * @param clusterName         Specify cluster name if you want to create Distributed table
     *
     */
-  def createClickhouseTable(dbName: String, tableName: String, partitionColumnName: String, indexColumns: Seq[String], clusterName: Option[String] = None)(implicit ds: ClickHouseDataSource) {
+  def createClickhouseTable(dbName: String, tableName: String, partitionColumnName: String, indexColumns: Seq[String])(implicit ds: ClickHouseDataSource) {
     assert(dbName != "")
     assert(tableName != "")
     assert(partitionColumnName != "")
 
-    val client = ClickhouseClient(clusterName)(ds)
+    val client = ClickhouseClient()(ds)
     val sqlStmt = createClickhouseTableDefinitionSQL(dbName, tableName, partitionColumnName, indexColumns)
 
-    clusterName match {
-      case None => client.query(sqlStmt)
-      case Some(clusterName) =>
-
-        // create local table on every node
-        client.queryCluster(sqlStmt)
-
-        // create distrib table (view) on every node
-        val sqlStmt2 = s"CREATE TABLE IF NOT EXISTS ${dbName}.${tableName}_all AS ${dbName}.${tableName} ENGINE = Distributed($clusterName, $dbName, $tableName, rand());"
-        client.queryCluster(sqlStmt2)
-    }
+    client.query(sqlStmt)
   }
 
   /**
@@ -82,35 +56,26 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     * @param clusterName Specify cluster name if you want to delete table on entire cluster
     *
     */
-  def dropClickhouseTable(dbName: String, tableName: String, clusterName: Option[String] = None)(implicit ds: ClickHouseDataSource) {
+  def dropClickhouseTable(dbName: String, tableName: String)(implicit ds: ClickHouseDataSource) {
     assert(dbName != "")
     assert(tableName != "")
 
-    val client = ClickhouseClient(clusterName)(ds)
+    val client = ClickhouseClient()(ds)
     var sqlStmt = s"DROP TABLE IF EXISTS $dbName.$tableName"
 
-    if (clusterName != None) {
-      sqlStmt += s" ON CLUSTER $clusterName"
-    }
 
     client.query(sqlStmt)
   }
 
-
-  def renameClickhouseTable(dbName: String, tableName: String, newTable: String, clusterName: Option[String] = None)(implicit ds: ClickHouseDataSource): Unit = {
+  def renameClickhouseTable(dbName: String, tableName: String, newTable: String)(implicit ds: ClickHouseDataSource) {
     assert(dbName != "")
     assert(tableName != "")
-    assert(newTable != "")
 
-    val client = ClickhouseClient(clusterName)(ds)
+    val client = ClickhouseClient()(ds)
     var sqlStmt = s"RENAME TABLE $dbName.$tableName TO $dbName.$newTable"
 
-    if (clusterName != None) {
-      sqlStmt += s" ON CLUSTER $clusterName"
-    }
 
     client.query(sqlStmt)
-
   }
 
   /**
@@ -122,33 +87,22 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     *
     */
   def saveToClickhouse(dbName: String, tableName: String, partitionFunc: (org.apache.spark.sql.Row) => java.sql.Date,
-                       partitionColumnName: String = "mock_date", clusterName0: Option[String] = None, batchSize: Int = 100000)(implicit ds: ClickHouseDataSource) = {
+                       partitionColumnName: String = "partition_column_date", batchSize: Int = 100000)(implicit ds: ClickHouseDataSource) = {
 
-    val defaultHost = ds.getHost
+    val targetHost = ds.getHost
     val defaultPort = ds.getPort
-
-    val (clusterTableName, clickHouseHosts) = clusterName0 match {
-      case Some(clusterName) =>
-        // get nodes from cluster
-        val client = ClickhouseClient(clusterName0)(ds)
-        (s"${tableName}_all", client.getClusterNodes())
-      case None =>
-        (tableName, Seq(defaultHost))
-    }
 
     val schema = df.schema
 
     // following code is going to be run on executors
     val insertResults = df.rdd.mapPartitions((partition: Iterator[org.apache.spark.sql.Row]) => {
 
-      val rnd = scala.util.Random.nextInt(clickHouseHosts.length)
-      val targetHost = clickHouseHosts(rnd)
-      val targetHostDs = ClickhouseConnectionFactory.get(targetHost, defaultPort)
+      val targetHostDs = ClickhouseConnectionFactory.get(targetHost, defaultPort, dbName)
 
       // explicit closing
       using(targetHostDs.getConnection) { conn =>
 
-        val insertStatementSql = generateInsertStatment(schema, dbName, clusterTableName, partitionColumnName)
+        val insertStatementSql = generateInsertStatment(schema, dbName, tableName, partitionColumnName)
         val statement = conn.prepareStatement(insertStatementSql)
 
         var totalInsert = 0
@@ -190,15 +144,11 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
           counter = 0
         }
 
-        // return: Seq((host, insertCount))
         List((targetHost, totalInsert)).toIterator
       }
 
     }).collect()
 
-    // aggr insert results by hosts
-    //		insertResults.groupBy(_._1)
-    //			.map(x => (x._1, x._2.map(_._2).sum))
   }
 
   private def generateInsertStatment(schema: org.apache.spark.sql.types.StructType, dbName: String, tableName: String, partitionColumnName: String) = {
@@ -215,7 +165,7 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     case StringType => null
     case BooleanType => false
     case DateType => java.sql.Timestamp.valueOf("1970-01-01 12:00:00")
-    case TimestampType => Calendar.getInstance()
+    case TimestampType => new java.sql.Timestamp(System.currentTimeMillis())
     case _ => null
   }
 

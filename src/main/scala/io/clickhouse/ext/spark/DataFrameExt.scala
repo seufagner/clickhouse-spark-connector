@@ -1,5 +1,7 @@
 package io.clickhouse.ext.spark
 
+import java.util.Calendar
+
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.types.DateType
 import org.apache.spark.sql.types.DoubleType
@@ -8,7 +10,6 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.types.TimestampType
-
 import io.clickhouse.ext.ClickhouseClient
 import io.clickhouse.ext.ClickhouseConnectionFactory
 import io.clickhouse.ext.Utils.using
@@ -213,8 +214,8 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     case IntegerType => 0
     case StringType => null
     case BooleanType => false
-    case DateType => None
-    case TimestampType => None
+    case DateType => java.sql.Timestamp.valueOf("1970-01-01 12:00:00")
+    case TimestampType => Calendar.getInstance()
     case _ => null
   }
 

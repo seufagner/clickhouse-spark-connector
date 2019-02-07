@@ -23,12 +23,10 @@ object ClickhouseConnectionFactory extends Serializable {
 
 		val props = new ClickHouseProperties()
 
-		props.setUser(username)
-		props.setPassword(password)
 		props.setSocketTimeout(180000) // 30000 is default value
 		props.setDataTransferTimeout(60000) // 10000 is default value
 
 		val clickHouseProps = new ClickHouseProperties(props)
-		new ClickHouseDataSource(s"jdbc:clickhouse://$host:$port/$dbName", clickHouseProps)
+		new ClickHouseDataSource(s"jdbc:clickhouse://$host:$port/$dbName?user=$username&password=$password", clickHouseProps)
 	}
 }

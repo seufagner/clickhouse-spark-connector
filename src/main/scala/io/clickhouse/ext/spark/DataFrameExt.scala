@@ -97,7 +97,7 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     // following code is going to be run on executors
     val insertResults = df.rdd.mapPartitions((partition: Iterator[org.apache.spark.sql.Row]) => {
 
-      val targetHostDs = ClickhouseConnectionFactory.get(targetHost, defaultPort, dbName)
+      val targetHostDs = ClickhouseConnectionFactory.get(targetHost, defaultPort, dbName=dbName)
 
       // explicit closing
       using(targetHostDs.getConnection) { conn =>
